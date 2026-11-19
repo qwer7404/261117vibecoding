@@ -1,0 +1,105 @@
+.app-shell {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-canvas);
+}
+
+.top-nav {
+  height: 72px;
+  padding: 0 var(--space-lg);
+  border-bottom: 1px solid var(--color-hairline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: var(--color-canvas);
+}
+
+.brand-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.18px;
+  color: var(--color-ink);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-primary);
+  display: inline-block;
+}
+
+.step-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-ink);
+  background-color: var(--color-surface-strong);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-full);
+}
+
+.main-container {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: var(--space-lg);
+  flex: 1;
+}
+
+.status-card {
+  background-color: var(--color-canvas);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  box-shadow: var(--shadow-float);
+}
+
+.status-card h2 {
+  margin: 0 0 var(--space-sm);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.18;
+  letter-spacing: -0.44px;
+}
+
+.status-card p {
+  margin: 0 0 var(--space-base);
+  font-size: 14px;
+  color: var(--color-body);
+}
+
+.checklist {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--color-body);
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.checklist li strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.primary-btn {
+  margin-top: var(--space-lg);
+  height: 48px;
+  padding: 0 var(--space-lg);
+  border: none;
+  border-radius: var(--radius-sm);
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 16px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.primary-btn:active {
+  background-color: var(--color-primary-active);
+}
