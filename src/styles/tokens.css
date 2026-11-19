@@ -1,78 +1,65 @@
-/* Design System Tokens (Airbnb-inspired Light Consumer Canvas + Pixel Drive Rules) */
+/* Dell 1996 Catalog Web Design Tokens */
 :root {
-  /* Colors */
-  --color-canvas: #ffffff;
-  --color-surface-soft: #f7f7f7;
-  --color-surface-strong: #f2f2f2;
-
-  --color-primary: #ff385c;
-  --color-primary-active: #e00b41;
-  --color-primary-disabled: #ffd1da;
+  --color-primary: #e91d2a;
   --color-on-primary: #ffffff;
+  --color-yellow-sticker: #fcc20f;
+  --color-purple-stripe: #6a26a4;
 
-  --color-ink: #222222;
-  --color-body: #3f3f3f;
-  --color-muted: #6a6a6a;
-  --color-muted-soft: #929292;
+  --color-frame-ink: #000000;
+  --color-canvas: #ffffff;
+  --color-ink: #000000;
+  --color-link: #0000ee;
 
-  --color-hairline: #dddddd;
-  --color-hairline-soft: #ebebeb;
-  --color-border-strong: #c1c1c1;
+  --color-tint-olive: #8e8a25;
+  --color-tint-sage: #b3bd95;
+  --color-tint-salmon: #d77a7a;
+  --color-tint-peach: #e6915d;
+  --color-tint-lime: #c0d4a7;
+  --color-tint-sky: #9ab6c8;
+  --color-tint-steel: #a5b8c0;
+  --color-tint-periwinkle: #8c9ae0;
 
-  --color-error: #c13515;
-  --color-error-hover: #b32505;
-  --color-scrim: rgba(0, 0, 0, 0.5);
+  --font-display: 'Arial Black', Helvetica, Arial, sans-serif;
+  --font-ui: Helvetica, Arial, sans-serif;
+  --font-body: 'Times New Roman', Times, serif;
 
-  /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', sans-serif;
-
-  /* Radius */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 32px;
+  --radius-none: 0px;
   --radius-full: 9999px;
 
-  /* Spacing (4px base unit) */
   --space-xxs: 2px;
   --space-xs: 4px;
+  --space-s: 6px;
   --space-sm: 8px;
+  --space-m: 10px;
   --space-md: 12px;
-  --space-base: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-xxl: 48px;
-  --space-section: 64px;
-
-  /* Elevation (Single shadow tier) */
-  --shadow-float:
-    rgba(0, 0, 0, 0.02) 0 0 0 1px,
-    rgba(0, 0, 0, 0.04) 0 2px 6px 0,
-    rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-xxl: 24px;
+  --space-section-sm: 32px;
+  --space-section: 40px;
 }
 
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+  border-radius: var(--radius-none);
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--color-canvas);
+  background-color: var(--color-frame-ink);
   color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 button,
 input {
-  font-family: inherit;
+  font-family: var(--font-ui);
 }
 
 .pixel-art {
