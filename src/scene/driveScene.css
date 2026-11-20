@@ -1,0 +1,249 @@
+.drive-stage-wrap {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: var(--space-lg) var(--space-lg) 0;
+}
+
+.drive-scene {
+  position: relative;
+  width: 100%;
+  height: 250px;
+  overflow: hidden;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--radius-none);
+  background: linear-gradient(180deg, #ffffff 0%, #f7f7f7 68%, #ededed 68%, #e4e4e4 100%);
+  user-select: none;
+}
+
+.scene-hud {
+  position: absolute;
+  top: var(--space-md);
+  left: var(--space-md);
+  right: var(--space-md);
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-xs);
+}
+
+.scene-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--color-hairline);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--color-ink);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background-color: var(--color-muted-soft);
+}
+
+.drive-scene[data-driving='true'] .status-dot {
+  background-color: var(--color-primary);
+}
+
+.hud-toggle-btn {
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--radius-pill);
+  background-color: rgba(255, 255, 255, 0.94);
+  color: var(--color-ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+/* Layer 1: Seoul / Namsan Tower Skyline (Slow Parallax) */
+.parallax-far {
+  position: absolute;
+  left: 0;
+  bottom: 32%;
+  width: 200%;
+  height: 44%;
+  display: flex;
+  animation: parallax-scroll 30s linear infinite;
+  animation-play-state: paused;
+}
+
+/* Layer 2: Yongsan Trees & Streetlights (Medium Parallax) */
+.parallax-mid {
+  position: absolute;
+  left: 0;
+  bottom: 28%;
+  width: 200%;
+  height: 44%;
+  display: flex;
+  animation: parallax-scroll 11s linear infinite;
+  animation-play-state: paused;
+}
+
+/* Layer 3: Asphalt Road (Fast Parallax) */
+.parallax-road {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 200%;
+  height: 28%;
+  background-color: #2c2c2c;
+  border-top: 3px solid #222222;
+  display: flex;
+  align-items: center;
+  animation: parallax-scroll 1.6s linear infinite;
+  animation-play-state: paused;
+}
+
+.road-strip {
+  width: 50%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+
+.road-dash {
+  width: 38px;
+  height: 4px;
+  background-color: #f7f7f7;
+}
+
+.parallax-chunk {
+  width: 50%;
+  height: 100%;
+}
+
+/* Side-View Pixel Roadster + Single Driver Profile Photo */
+.vehicle-rig {
+  position: absolute;
+  left: 50%;
+  bottom: 14%;
+  width: min(330px, 78%);
+  aspect-ratio: 16 / 9;
+  transform: translateX(-50%);
+  z-index: 3;
+  animation: car-bounce 0.44s steps(2, end) infinite;
+  animation-play-state: paused;
+}
+
+.driver-seat-slot {
+  position: absolute;
+  /* 차체 윗면(약 49%) 바로 위 + 앞유리(57~61%) 왼쪽에 배치 → 자동차와 겹침 없음 */
+  left: 24%;
+  bottom: 51%;
+  width: 30%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1;
+}
+
+.driver-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.driver-placeholder-tag {
+  padding: 2px 6px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 1px dashed var(--color-hairline-strong);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--color-muted);
+}
+
+.car-svg {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.wheel-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wheel-rotate 0.4s steps(4, end) infinite;
+  animation-play-state: paused;
+}
+
+.exhaust-puff {
+  position: absolute;
+  left: -14px;
+  bottom: 24%;
+  width: 10px;
+  height: 10px;
+  background-color: #c1c1c1;
+  opacity: 0;
+  animation: puff-float 0.8s steps(3, end) infinite;
+  animation-play-state: paused;
+}
+
+.drive-scene[data-driving='true'] .parallax-far,
+.drive-scene[data-driving='true'] .parallax-mid,
+.drive-scene[data-driving='true'] .parallax-road,
+.drive-scene[data-driving='true'] .vehicle-rig,
+.drive-scene[data-driving='true'] .wheel-spin,
+.drive-scene[data-driving='true'] .exhaust-puff {
+  animation-play-state: running;
+}
+
+@keyframes parallax-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes car-bounce {
+  0%, 100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  50% {
+    transform: translate3d(-50%, -3px, 0);
+  }
+}
+
+@keyframes wheel-rotate {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes puff-float {
+  0% {
+    opacity: 0.75;
+    transform: translate3d(0, 0, 0) scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-24px, -10px, 0) scale(1.4);
+  }
+}
+
+@media (min-width: 768px) {
+  .drive-scene {
+    height: 290px;
+  }
+}

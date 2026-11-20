@@ -1,11 +1,6 @@
-# Dependencies
 node_modules
-
-# Build output
 dist
 dist-ssr
-
-# Local env & editor
 .env
 .env.*
 .DS_Store

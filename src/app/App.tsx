@@ -1,390 +1,382 @@
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
+import { SOOKMYUNG_BENEFITS } from '../data/benefits';
+import { loadStudentUser, saveStudentUser } from '../lib/storage';
+import { DriveScene } from '../scene/DriveScene';
+import { EventsPanel } from '../components/EventsPanel';
 import type {
-  AppScreen,
-  CharacterSlot,
-  DotSize,
-  PlaybackMode,
-  PlayerStatus,
-  SeatPosition,
-  Track
+  AgeFilter,
+  BenefitCategory,
+  CultureBenefit,
+  SeoulEvent,
+  StudentUser
 } from '../types';
 import './app.css';
 
-const DOT_OPTIONS: { value: DotSize; label: string }[] = [
-  { value: 'small', label: '작게' },
-  { value: 'medium', label: '보통' },
-  { value: 'large', label: '크게' }
+const AGE_OPTIONS: { value: AgeFilter; label: string }[] = [
+  { value: 'all', label: '전체 연령' },
+  { value: 'u24', label: '만 24세 이하' },
+  { value: 'u29', label: '만 25~29세' }
 ];
 
-const MODE_OPTIONS: { value: PlaybackMode; label: string }[] = [
-  { value: 'sequence', label: '순차' },
-  { value: 'repeat-one', label: '1곡 반복' },
-  { value: 'repeat-all', label: '전체 반복' }
+const CATEGORY_OPTIONS: ('전체' | BenefitCategory)[] = [
+  '전체',
+  '박물관',
+  '미술관',
+  '문화예술',
+  '기타'
 ];
 
-const INITIAL_SLOTS: CharacterSlot[] = [
-  { id: 'slot-1', fileName: 'CHAR_01.PNG (미등록)', dotSize: 'medium', seat: 'driver', hasTransparency: true },
-  { id: 'slot-2', fileName: 'CHAR_02.PNG (미등록)', dotSize: 'medium', seat: 'passenger', hasTransparency: true }
+const TIME_OPTIONS: { value: number; label: string }[] = [
+  { value: 999, label: '전체 시간' },
+  { value: 30, label: '왕복 30분 이내' },
+  { value: 45, label: '왕복 45분 이내' },
+  { value: 60, label: '왕복 60분 이내' }
 ];
 
-const INITIAL_TRACKS: Track[] = [
-  { videoId: 'jfKfPfyJRdk', url: 'https://www.youtube.com/watch?v=jfKfPfyJRdk' }
+const DISCOUNT_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: '전체 할인' },
+  { value: 100, label: '무료 (100%)' },
+  { value: 50, label: '50% 이상' },
+  { value: 30, label: '30% 이상' }
 ];
 
 export function App() {
-  const [screen, setScreen] = useState<AppScreen>('setup');
-  const [slots, setSlots] = useState<CharacterSlot[]>(INITIAL_SLOTS);
-  const [tracks, setTracks] = useState<Track[]>(INITIAL_TRACKS);
-  const [urlInput, setUrlInput] = useState('');
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [mode, setMode] = useState<PlaybackMode>('repeat-all');
-  const [status, setStatus] = useState<PlayerStatus>('paused');
+  // Top-right Login State
+  const [user, setUser] = useState<StudentUser | null>(() => loadStudentUser());
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState(user?.nickname ?? '');
+  const [emailInput, setEmailInput] = useState(user?.email ?? '');
+  const [ageInput, setAgeInput] = useState(user ? String(user.age) : '22');
 
-  const updateSlotDotSize = (id: string, dotSize: DotSize) => {
-    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, dotSize } : s)));
-  };
+  // Culture Benefit Filters
+  const [ageFilter, setAgeFilter] = useState<AgeFilter>(() => {
+    if (!user) return 'all';
+    return user.age <= 24 ? 'u24' : user.age <= 29 ? 'u29' : 'all';
+  });
+  const [categoryFilter, setCategoryFilter] = useState<'전체' | BenefitCategory>('전체');
+  const [maxRoundTrip, setMaxRoundTrip] = useState<number>(999);
+  const [minDiscount, setMinDiscount] = useState<number>(0);
+  const [sortBy, setSortBy] = useState<'distance' | 'discount'>('distance');
 
-  const assignSeat = (id: string, seat: SeatPosition) => {
-    setSlots((prev) =>
-      prev.map((s) =>
-        s.id === id ? { ...s, seat } : { ...s, seat: seat === 'driver' ? 'passenger' : 'driver' }
-      )
-    );
-  };
+  // Drive Stage State
+  const [isDriving, setIsDriving] = useState(true);
+  const [selectedBenefitId, setSelectedBenefitId] = useState<string>(SOOKMYUNG_BENEFITS[0].id);
+  const [selectedEvent, setSelectedEvent] = useState<SeoulEvent | null>(null);
 
-  const handleAddTrack = (e: FormEvent) => {
-    e.preventDefault();
-    const trimmed = urlInput.trim();
-    if (!trimmed || tracks.length >= 10) return;
-    // shortcut: 2단계 레이아웃 검증용 임시 ID 부여, 6단계에서 실제 YouTube URL 파서로 교체
-    setTracks((prev) => [...prev, { videoId: `track-${prev.length + 1}`, url: trimmed }]);
-    setUrlInput('');
-  };
-
-  const moveTrack = (index: number, dir: -1 | 1) => {
-    const next = index + dir;
-    if (next < 0 || next >= tracks.length) return;
-    setTracks((prev) => {
-      const copy = [...prev];
-      [copy[index], copy[next]] = [copy[next], copy[index]];
-      return copy;
+  const filteredBenefits = useMemo(() => {
+    return SOOKMYUNG_BENEFITS.filter((item) => {
+      if (ageFilter === 'u24' && item.maxAge < 24) return false;
+      if (ageFilter === 'u29' && item.maxAge < 29) return false;
+      if (categoryFilter !== '전체' && item.category !== categoryFilter) return false;
+      if (item.roundTripMinutes > maxRoundTrip) return false;
+      if (item.discountPercent < minDiscount) return false;
+      return true;
+    }).sort((a, b) => {
+      if (sortBy === 'discount') {
+        return b.discountPercent - a.discountPercent || a.roundTripMinutes - b.roundTripMinutes;
+      }
+      return a.roundTripMinutes - b.roundTripMinutes;
     });
+  }, [ageFilter, categoryFilter, maxRoundTrip, minDiscount, sortBy]);
+
+  const activeDestination: CultureBenefit | null = useMemo(() => {
+    return (
+      filteredBenefits.find((b) => b.id === selectedBenefitId) ??
+      filteredBenefits[0] ??
+      null
+    );
+  }, [filteredBenefits, selectedBenefitId]);
+
+  const handleLoginSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const cleanName = nicknameInput.trim() || '숙명 학우';
+    const parsedAge = Math.max(18, Math.min(39, Number(ageInput) || 22));
+    const nextUser: StudentUser = {
+      nickname: cleanName,
+      email: emailInput.trim(),
+      age: parsedAge
+    };
+    setUser(nextUser);
+    saveStudentUser(nextUser);
+    setAgeFilter(parsedAge <= 24 ? 'u24' : parsedAge <= 29 ? 'u29' : 'all');
+    setLoginOpen(false);
   };
 
-  const removeTrack = (index: number) => {
-    setTracks((prev) => prev.filter((_, i) => i !== index));
-    setCurrentIndex((prev) => Math.max(0, Math.min(prev, tracks.length - 2)));
+  const handleLogout = () => {
+    setUser(null);
+    saveStudentUser(null);
+    setLoginOpen(false);
   };
-
-  const startDrive = () => {
-    if (tracks.length === 0) return;
-    setCurrentIndex(0);
-    setStatus('playing');
-    setScreen('drive');
-  };
-
-  const activeTrack = tracks[currentIndex];
 
   return (
-    <div className="page-frame">
-      <header className="top-banner">
-        <h1 className="banner-title">PIXEL DRIVE. BUILD YOUR OWN RIDE.</h1>
-        <div className="banner-right">
-          <span className="buy-sticker">
-            DRIVE <span className="sticker-purple">a</span> PIXEL
-          </span>
-          <span className="phone-callout">1-800-PXL-DRIV</span>
+    <div className="app-shell">
+      {/* Top Navigation with Right Login Tab */}
+      <header className="top-nav">
+        <span className="nav-left">SOOKMYUNG · YONGSAN</span>
+        <h1 className="wordmark-display">CULTURE DRIVE</h1>
+        <div className="nav-right">
+          <button
+            type="button"
+            className="login-tab-btn"
+            data-logged-in={user ? 'true' : 'false'}
+            onClick={() => setLoginOpen((prev) => !prev)}
+          >
+            {user ? `${user.nickname} · 만 ${user.age}세` : '로그인'}
+          </button>
         </div>
       </header>
 
-      <main className="main-container">
-        {screen === 'setup' ? (
-          <div className="setup-layout">
-            <aside className="left-rail">
-              <div className="eyebrow-olive">PIXEL DRIVE SYSTEMS</div>
-
-              <section className="cta-block-red" aria-label="주행 시작 안내">
-                <p>
-                  At PixelDrive.local, configure your 8-bit passengers, queue up to 10 YouTube BGM
-                  tracks, and hit the road in pure side-scrolling style.
-                </p>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  disabled={tracks.length === 0}
-                  onClick={startDrive}
-                >
-                  드라이브 시작 ({tracks.length}곡)
-                </button>
-              </section>
-            </aside>
-
-            <div className="right-stack">
-              <section className="ribbon-card" aria-labelledby="char-heading">
-                <div className="ribbon-title-bar">
-                  <span id="char-heading">CHARACTER SLOTS — PNG MAX 2 (5MB)</span>
-                  <span className="new-burst">NEW!</span>
-                </div>
-                <div className="ribbon-body-sage">
-                  <p style={{ margin: 0 }}>
-                    투명 배경 PNG를 권장합니다. 자동 배경 제거 기능은 지원하지 않습니다. (3단계에서 업로드 및 Canvas 도트 변환 연결)
-                  </p>
-
-                  {slots.map((slot, idx) => (
-                    <div key={slot.id} className="slot-box">
-                      <div className="slot-top">
-                        <div>
-                          <strong>SLOT 0{idx + 1}</strong>
-                          <div>{slot.fileName}</div>
-                        </div>
-                        <div className="photo-notch pixel-art">
-                          3단계
-                          <br />
-                          CANVAS
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="field-label">도트 크기</span>
-                        <div className="btn-row">
-                          {DOT_OPTIONS.map((opt) => (
-                            <button
-                              key={opt.value}
-                              type="button"
-                              className={slot.dotSize === opt.value ? 'btn-primary' : 'btn-secondary'}
-                              aria-pressed={slot.dotSize === opt.value}
-                              onClick={() => updateSlotDotSize(slot.id, opt.value)}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="field-label">탑승 좌석</span>
-                        <div className="btn-row">
-                          {(['driver', 'passenger'] as SeatPosition[]).map((seat) => (
-                            <button
-                              key={seat}
-                              type="button"
-                              className={slot.seat === seat ? 'btn-primary' : 'btn-secondary'}
-                              aria-pressed={slot.seat === seat}
-                              onClick={() => assignSeat(slot.id, seat)}
-                            >
-                              {seat === 'driver' ? '운전석' : '조수석'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              <section className="ribbon-card" aria-labelledby="bgm-heading">
-                <div className="ribbon-title-bar">
-                  <span id="bgm-heading">BGM PLAYLIST — {tracks.length} / 10 TRACKS</span>
-                </div>
-                <div className="ribbon-body-sky">
-                  <form className="url-form" onSubmit={handleAddTrack}>
-                    <input
-                      type="url"
-                      className="text-input"
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      aria-label="YouTube URL 입력"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      disabled={tracks.length >= 10}
-                    />
-                    <button
-                      type="submit"
-                      className="btn-primary"
-                      disabled={!urlInput.trim() || tracks.length >= 10}
-                    >
-                      추가
-                    </button>
-                  </form>
-
-                  <ul className="track-list">
-                    {tracks.map((track, idx) => (
-                      <li key={`${track.videoId}-${idx}`} className="track-item">
-                        <span className="track-url">
-                          {idx + 1}. {track.url}
-                        </span>
-                        <div className="track-actions">
-                          <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="위로 이동"
-                            disabled={idx === 0}
-                            onClick={() => moveTrack(idx, -1)}
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="아래로 이동"
-                            disabled={idx === tracks.length - 1}
-                            onClick={() => moveTrack(idx, 1)}
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn"
-                            aria-label="삭제"
-                            onClick={() => removeTrack(idx)}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div>
-                    <span className="field-label">재생 모드</span>
-                    <div className="btn-row">
-                      {MODE_OPTIONS.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          className={mode === opt.value ? 'btn-primary' : 'btn-secondary'}
-                          aria-pressed={mode === opt.value}
-                          onClick={() => setMode(opt.value)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </section>
+      {/* Collapsible Login Panel */}
+      {loginOpen && (
+        <div className="login-drawer">
+          <section className="login-panel" aria-label="숙명여대 학우 로그인">
+            <div className="section-head">
+              <h2 className="title-md">SOOKMYUNG STUDENT LOGIN</h2>
+              <span className="caption-uppercase">내 나이 자동 필터 연동</span>
             </div>
-          </div>
-        ) : (
-          <div className="drive-layout">
-            <section className="ribbon-card" aria-label="픽셀 주행 장면">
-              <div className="ribbon-title-bar">
-                <span>SIDE-VIEW DRIVE STAGE</span>
+            <form className="login-form-grid" onSubmit={handleLoginSubmit}>
+              <label className="control-block">
+                <span className="caption-uppercase">닉네임 / 이름</span>
+                <input
+                  type="text"
+                  className="underline-input"
+                  placeholder="예: 눈송이"
+                  value={nicknameInput}
+                  onChange={(e) => setNicknameInput(e.target.value)}
+                />
+              </label>
+              <label className="control-block">
+                <span className="caption-uppercase">숙명 이메일 (선택)</span>
+                <input
+                  type="email"
+                  className="underline-input"
+                  placeholder="snow@sookmyung.ac.kr"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                />
+              </label>
+              <label className="control-block">
+                <span className="caption-uppercase">내 만 나이</span>
+                <input
+                  type="number"
+                  min={18}
+                  max={39}
+                  className="underline-input"
+                  value={ageInput}
+                  onChange={(e) => setAgeInput(e.target.value)}
+                />
+              </label>
+              <div className="login-actions">
+                <button type="submit" className="btn-primary-outline">
+                  로그인 저장
+                </button>
+                {user && (
+                  <button type="button" className="btn-pill" onClick={handleLogout}>
+                    로그아웃
+                  </button>
+                )}
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {/* Side-View Pixel Drive Stage */}
+      <DriveScene
+        isDriving={isDriving}
+        onToggleDrive={() => setIsDriving((d) => !d)}
+        destination={
+          selectedEvent
+            ? { title: selectedEvent.title, roundTripMinutes: selectedEvent.rt }
+            : activeDestination
+        }
+      />
+
+      {/* Editorial Hero Title */}
+      <section className="hero-band">
+        <p className="caption-uppercase">
+          UNDER 24 · UNDER 29 YOUTH ARTS &amp; MUSEUM PASS
+        </p>
+        <h2 className="hero-h1">SOOKMYUNG GAP-TIME DRIVE</h2>
+        <p className="hero-prose">
+          숙명여대 출발 거리와 왕복 소요시간, 만 24세·만 29세 이하 청년 할인율을 한눈에 비교하고
+          공강과 하교 시간에 가볍게 다녀올 문화예술 공간을 바로 예약하세요.
+        </p>
+      </section>
+
+      {/* Main 2-Column Editorial Layout */}
+      <main className="main-container">
+        <div className="editorial-grid">
+          {/* Left Column: 1 Profile Photo + Benefit Filters */}
+          <aside className="surface-card" aria-label="혜택 필터">
+            <div className="section-head">
+              <h3 className="display-sm">FILTER</h3>
+              <span className="caption-uppercase">내 조건</span>
+            </div>
+
+            {/* Age Filter */}
+            <div className="control-block">
+              <span className="caption-uppercase">내 나이 혜택 기준</span>
+              <div className="pill-row">
+                {AGE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={ageFilter === opt.value}
+                    onClick={() => setAgeFilter(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Category Filter */}
+            <div className="control-block">
+              <span className="caption-uppercase">분야 선택</span>
+              <div className="pill-row">
+                {CATEGORY_OPTIONS.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={categoryFilter === cat}
+                    onClick={() => setCategoryFilter(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Round-Trip Time Filter */}
+            <div className="control-block">
+              <span className="caption-uppercase">숙대 기준 왕복시간</span>
+              <div className="pill-row">
+                {TIME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={maxRoundTrip === opt.value}
+                    onClick={() => setMaxRoundTrip(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Discount Filter */}
+            <div className="control-block">
+              <span className="caption-uppercase">할인율</span>
+              <div className="pill-row">
+                {DISCOUNT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={minDiscount === opt.value}
+                    onClick={() => setMinDiscount(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          {/* Right Column: Filtered Culture Benefits */}
+          <section className="surface-card" aria-labelledby="benefits-heading">
+            <div className="section-head">
+              <h3 id="benefits-heading" className="display-sm">
+                CULTURE SPOTS ({filteredBenefits.length})
+              </h3>
+              <div className="pill-row">
                 <button
                   type="button"
-                  className="btn-secondary"
-                  onClick={() => setScreen('setup')}
+                  className="btn-pill"
+                  aria-pressed={sortBy === 'distance'}
+                  onClick={() => setSortBy('distance')}
                 >
-                  설정으로 돌아가기
+                  가까운순
+                </button>
+                <button
+                  type="button"
+                  className="btn-pill"
+                  aria-pressed={sortBy === 'discount'}
+                  onClick={() => setSortBy('discount')}
+                >
+                  할인율순
                 </button>
               </div>
-              <div className="ribbon-body-peach stage-viewport">
-                <div className="stage-top-row">
-                  <strong>
-                    {status === 'playing' ? 'STATUS: DRIVING (5단계 애니메이션 연결)' : 'STATUS: PAUSED'}
-                  </strong>
-                  <div className="cert-seal" aria-hidden="true">
-                    8-BIT
-                    <br />
-                    READERS
-                    <br />
-                    CHOICE
-                  </div>
-                </div>
+            </div>
 
-                <div className="car-placeholder">
-                  <span>
-                    조수석: {slots.find((s) => s.seat === 'passenger')?.dotSize ?? '-'}
-                  </span>
-                  <span>[SIDE-CAR]</span>
-                  <span>
-                    운전석: {slots.find((s) => s.seat === 'driver')?.dotSize ?? '-'}
-                  </span>
-                </div>
+            {filteredBenefits.length === 0 ? (
+              <div className="empty-state">
+                <p className="body-prose">
+                  선택한 조건에 맞는 혜택이 없습니다. 왕복시간이나 할인율 필터를 완화해 보세요.
+                </p>
               </div>
-            </section>
-
-            <section className="ribbon-card" aria-label="YouTube 플레이어 및 컨트롤">
-              <div className="ribbon-title-bar">
-                <span>YOUTUBE IFRAME DECK</span>
-              </div>
-              <div className="ribbon-body-periwinkle">
-                <div className="yt-embed-box">
-                  <div>
-                    <strong>YouTube IFrame 영역 (6단계 연결)</strong>
-                    <p style={{ margin: '6px 0 0' }}>{activeTrack?.url ?? '재생할 곡 없음'}</p>
-                  </div>
-                </div>
-
-                <div className="transport-row">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={tracks.length <= 1}
-                    onClick={() => setCurrentIndex((i) => (i - 1 + tracks.length) % tracks.length)}
-                  >
-                    이전 곡
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    aria-pressed={status === 'playing'}
-                    onClick={() => setStatus((s) => (s === 'playing' ? 'paused' : 'playing'))}
-                  >
-                    {status === 'playing' ? '일시정지' : '재생'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    disabled={tracks.length <= 1}
-                    onClick={() => setCurrentIndex((i) => (i + 1) % tracks.length)}
-                  >
-                    다음 곡
-                  </button>
-                </div>
-
-                <div className="btn-row">
-                  {MODE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={mode === opt.value ? 'btn-primary' : 'btn-secondary'}
-                      aria-pressed={mode === opt.value}
-                      onClick={() => setMode(opt.value)}
+            ) : (
+              <div className="benefit-list">
+                {filteredBenefits.map((item) => {
+                  const isSelected = activeDestination?.id === item.id;
+                  return (
+                    <article
+                      key={item.id}
+                      className="benefit-card"
+                      data-selected={isSelected ? 'true' : 'false'}
+                      onClick={() => {
+                        setSelectedBenefitId(item.id);
+                        setSelectedEvent(null);
+                      }}
                     >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+                      <div className="benefit-top">
+                        <span className="caption-uppercase">
+                          {item.category} · {item.ageLabel}
+                        </span>
+                        <span className="discount-tag">{item.discountBadge}</span>
+                      </div>
+
+                      <h4 className="title-md">{item.title}</h4>
+                      <p className="body-prose">{item.description}</p>
+
+                      <div className="benefit-specs">
+                        <span>거리 {item.distanceKm}km</span>
+                        <span>왕복 약 {item.roundTripMinutes}분</span>
+                        <span>{item.gapTip}</span>
+                      </div>
+
+                      <div className="benefit-footer">
+                        <span className="caption-uppercase">{item.routeSummary}</span>
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn-primary-outline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          혜택 링크 이동 ↗
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
-            </section>
-          </div>
-        )}
+            )}
+          </section>
+        </div>
+
+        <EventsPanel selectedId={selectedEvent?.id ?? null} onSelect={setSelectedEvent} />
       </main>
 
       <footer className="footer-band">
-        <nav className="icon-label-nav" aria-label="하단 메뉴">
-          <button type="button" className="nav-cell" onClick={() => setScreen('setup')}>
-            FIND
-          </button>
-          <button type="button" className="nav-cell" onClick={() => setScreen('setup')}>
-            HOME
-          </button>
-          <button type="button" className="nav-cell" onClick={startDrive}>
-            DRIVE STAGE
-          </button>
-          <button type="button" className="nav-cell" onClick={() => setScreen('setup')}>
-            SETUP &amp; HELP
-          </button>
-        </nav>
-        <div>
-          <a href="#top" className="classic-link" onClick={(e) => e.preventDefault()}>
-            Copyright
-          </a>{' '}
-          (Local Browser Mode)
-        </div>
-        <p className="footer-caption">
-          This site is best viewed with modern browsers. All PNG &amp; playlist data stay locally in your browser.
+        <p className="footer-fine">
+          Sookmyung Women&apos;s University Youth Culture Navigator · Sample Benefit Data
         </p>
+        <span className="wordmark-display">CULTURE DRIVE</span>
       </footer>
     </div>
   );

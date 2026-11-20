@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import type { AppPlaybackState, DotSize } from '../../types';
+import { SOOKMYUNG_BENEFITS } from '../../data/benefits';
+import { validateAvatarFile } from '../pixelate';
 
-describe('Step 1 baseline domain types', () => {
-  it('initializes valid playback state structure', () => {
-    const sizes: DotSize[] = ['small', 'medium', 'large'];
-    const initialState: AppPlaybackState = {
-      tracks: [],
-      currentIndex: 0,
-      mode: 'repeat-all',
-      status: 'unstarted'
-    };
+describe('Sookmyung Culture Drive data and avatar validation', () => {
+  it('contains mock cultural benefits with valid external links and round-trip times', () => {
+    expect(SOOKMYUNG_BENEFITS.length).toBeGreaterThanOrEqual(8);
+    for (const item of SOOKMYUNG_BENEFITS) {
+      expect(item.url.startsWith('https://')).toBe(true);
+      expect(item.roundTripMinutes).toBeGreaterThan(0);
+    }
+  });
 
-    expect(sizes).toHaveLength(3);
-    expect(initialState.mode).toBe('repeat-all');
-    expect(initialState.status).toBe('unstarted');
+  it('validates supported avatar formats', () => {
+    expect(validateAvatarFile({ type: 'image/png', name: 'me.png', size: 2048 })).toBeNull();
+    expect(validateAvatarFile({ type: 'image/jpeg', name: 'me.jpg', size: 2048 })).toBeNull();
+    expect(validateAvatarFile({ type: 'application/pdf', name: 'doc.pdf', size: 2048 })).not.toBeNull();
   });
 });
