@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import eventsData from '../data/events.json';
+import { BookmarkButton } from './BookmarkButton';
 import type { EventGroup, SeoulEvent } from '../types';
 
 export const EVENTS = eventsData as SeoulEvent[];
@@ -23,6 +24,8 @@ export interface EventFilter {
   deadlineSort: boolean; // 마감 임박순
   query: string;
 }
+
+export const evKey = (e: SeoulEvent) => `ev:${e.title}|${e.start}`;
 
 const DAY = 86400000;
 export const daysUntil = (d: string) => Math.round((Date.parse(d) - Date.parse(TODAY)) / DAY);
@@ -50,6 +53,8 @@ interface Props {
   list: SeoulEvent[];
   gap: number;
   selectedId: number | null;
+  marks: string[];
+  onToggleMark: (key: string) => void;
   onSelect: (ev: SeoulEvent) => void;
 }
 
@@ -57,13 +62,14 @@ const fmt = (d: string) => `${d.slice(5).replace('-', '.')}(${dow(d)})`;
 
 function dday(e: SeoulEvent) {
   const left = daysUntil(e.end);
+  if (left < 0) return { text: '종료', hot: false };
   if (daysUntil(e.start) > 0) return { text: `${fmt(e.start)} 시작`, hot: false };
   if (left === 0) return { text: '오늘 마감', hot: true };
   if (left === 1) return { text: '내일 마감', hot: true };
   return { text: `D-${left}`, hot: left <= 7 };
 }
 
-export function EventsPanel({ list, gap, selectedId, onSelect }: Props) {
+export function EventsPanel({ list, gap, selectedId, marks, onToggleMark, onSelect }: Props) {
   const [limit, setLimit] = useState(12);
 
   return (
@@ -72,7 +78,7 @@ export function EventsPanel({ list, gap, selectedId, onSelect }: Props) {
         <h3 id="events-heading" className="display-sm">
           SEOUL LIVE EVENTS ({list.length})
         </h3>
-        <span className="caption-uppercase">서울문화포털 · 숙대 반경 8km · 기간 한정 행사 (필터는 왼쪽)</span>
+        <span className="caption-uppercase">서울문화포털 · 숙대 반경 8km · 일정기간 · 지금 열리는 서울시 행사</span>
       </div>
 
       {list.length === 0 ? (
@@ -90,6 +96,7 @@ export function EventsPanel({ list, gap, selectedId, onSelect }: Props) {
                   <span className="caption-uppercase">{e.grp} · {e.gu} · {e.target || '누구나'}</span>
                   <span className="discount-tag">{e.free ? '무료' : e.youth ? '청년·학생 할인' : e.fee}</span>
                   <span className={dd.hot ? 'deadline-tag hot' : 'deadline-tag'}>{dd.text}</span>
+                  <BookmarkButton active={marks.includes(evKey(e))} onToggle={() => onToggleMark(evKey(e))} />
                 </div>
                 <h4 className="title-md">{e.title}</h4>
                 <p className="body-prose">{e.place}</p>

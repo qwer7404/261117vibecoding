@@ -100,3 +100,22 @@ export function loadStudentUser(): StudentUser | null {
     return null;
   }
 }
+
+const BOOKMARK_KEY = 'sookmyung-bookmarks-v1';
+
+export function loadBookmarks(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BOOKMARK_KEY) ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveBookmarks(keys: string[]): void {
+  try {
+    localStorage.setItem(BOOKMARK_KEY, JSON.stringify(keys));
+  } catch {
+    // ignore storage restrictions
+  }
+}

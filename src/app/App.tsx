@@ -1,43 +1,16 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { SOOKMYUNG_BENEFITS } from '../data/benefits';
-import { loadStudentUser, saveStudentUser } from '../lib/storage';
+import { loadBookmarks, loadStudentUser, saveBookmarks, saveStudentUser } from '../lib/storage';
 import { DriveScene } from '../scene/DriveScene';
-import {
-  EventsPanel,
-  GAPS,
-  GROUPS,
-  VIEW_MIN,
-  filterEvents
-} from '../components/EventsPanel';
+import { EVENTS, EventsPanel, VIEW_MIN, evKey, filterEvents } from '../components/EventsPanel';
+import { BookmarkButton } from '../components/BookmarkButton';
+import { FilterPanel, type Filters } from '../components/FilterPanel';
 import type {
-  AgeFilter,
-  BenefitCategory,
   CultureBenefit,
   SeoulEvent,
   StudentUser
 } from '../types';
 import './app.css';
-
-const AGE_OPTIONS: { value: AgeFilter; label: string }[] = [
-  { value: 'all', label: '전체 연령' },
-  { value: 'u24', label: '만 24세 이하' },
-  { value: 'u29', label: '만 25~29세' }
-];
-
-const CATEGORY_OPTIONS: ('전체' | BenefitCategory)[] = [
-  '전체',
-  '박물관',
-  '미술관',
-  '문화예술',
-  '기타'
-];
-
-const DISCOUNT_OPTIONS: { value: number; label: string }[] = [
-  { value: 0, label: '전체 할인' },
-  { value: 100, label: '무료 (100%)' },
-  { value: 50, label: '50% 이상' },
-  { value: 30, label: '30% 이상' }
-];
 
 export function App() {
   // Top-right Login State
@@ -47,47 +20,65 @@ export function App() {
   const [emailInput, setEmailInput] = useState(user?.email ?? '');
   const [ageInput, setAgeInput] = useState(user ? String(user.age) : '22');
 
-  // Culture Benefit Filters
-  const [ageFilter, setAgeFilter] = useState<AgeFilter>(() => {
-    if (!user) return 'all';
-    return user.age <= 24 ? 'u24' : user.age <= 29 ? 'u29' : 'all';
-  });
-  const [categoryFilter, setCategoryFilter] = useState<'전체' | BenefitCategory>('전체');
-  // 공강 시간(두 목록 공통) + 행사 전용 필터
-  const [gap, setGap] = useState<number>(999);
-  const [eventGroup, setEventGroup] = useState<(typeof GROUPS)[number]>('전체');
-  const [onlyYouth, setOnlyYouth] = useState(false);
-  const [onlyNow, setOnlyNow] = useState(true);
-  const [soon, setSoon] = useState(false);
-  const [deadlineSort, setDeadlineSort] = useState(false);
-  const [query, setQuery] = useState('');
-  const [minDiscount, setMinDiscount] = useState<number>(0);
-  const [sortBy, setSortBy] = useState<'distance' | 'discount'>('distance');
+  // 통합 필터 · 검색 전에는 가로 바, 검색 후에는 좌측 패널 + 결과
+  const [f, setF] = useState<Filters>(() => ({
+    kind: 'all',
+    gap: 999,
+    bookmarkOnly: false,
+    age: !user ? 'all' : user.age <= 24 ? 'u24' : user.age <= 29 ? 'u29' : 'all',
+    category: '전체',
+    minDiscount: 0,
+    sortBy: 'distance',
+    group: '전체',
+    onlyYouth: false,
+    onlyNow: true,
+    soon: false,
+    deadlineSort: false,
+    query: ''
+  }));
+  const set = (patch: Partial<Filters>) => setF((prev) => ({ ...prev, ...patch }));
+  const [searched, setSearched] = useState(false);
+
+  // 북마크 (localStorage)
+  const [marks, setMarks] = useState<string[]>(() => loadBookmarks());
+  const toggleMark = (key: string) =>
+    setMarks((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      saveBookmarks(next);
+      return next;
+    });
 
   // Drive Stage State
   const [isDriving, setIsDriving] = useState(true);
   const [selectedBenefitId, setSelectedBenefitId] = useState<string>(SOOKMYUNG_BENEFITS[0].id);
   const [selectedEvent, setSelectedEvent] = useState<SeoulEvent | null>(null);
 
+  const showSpots = f.kind !== 'timed';
+  const showEvents = f.kind !== 'permanent';
+
   const filteredBenefits = useMemo(() => {
     return SOOKMYUNG_BENEFITS.filter((item) => {
-      if (ageFilter === 'u24' && item.maxAge < 24) return false;
-      if (ageFilter === 'u29' && item.maxAge < 29) return false;
-      if (categoryFilter !== '전체' && item.category !== categoryFilter) return false;
-      if (gap !== 999 && item.roundTripMinutes + VIEW_MIN > gap) return false;
-      if (item.discountPercent < minDiscount) return false;
+      if (f.bookmarkOnly) return marks.includes(`spot:${item.id}`);
+      if (f.age === 'u24' && item.maxAge < 24) return false;
+      if (f.age === 'u29' && item.maxAge < 29) return false;
+      if (f.category !== '전체' && item.category !== f.category) return false;
+      if (f.gap !== 999 && item.roundTripMinutes + VIEW_MIN > f.gap) return false;
+      if (item.discountPercent < f.minDiscount) return false;
       return true;
-    }).sort((a, b) => {
-      if (sortBy === 'discount') {
-        return b.discountPercent - a.discountPercent || a.roundTripMinutes - b.roundTripMinutes;
+    }).sort((x, y) => {
+      if (f.sortBy === 'discount') {
+        return y.discountPercent - x.discountPercent || x.roundTripMinutes - y.roundTripMinutes;
       }
-      return a.roundTripMinutes - b.roundTripMinutes;
+      return x.roundTripMinutes - y.roundTripMinutes;
     });
-  }, [ageFilter, categoryFilter, gap, minDiscount, sortBy]);
+  }, [f, marks]);
 
   const filteredEvents = useMemo(
-    () => filterEvents({ gap, group: eventGroup, onlyYouth, onlyNow, soon, deadlineSort, query }),
-    [gap, eventGroup, onlyYouth, onlyNow, soon, deadlineSort, query]
+    () =>
+      f.bookmarkOnly
+        ? EVENTS.filter((e) => marks.includes(evKey(e))).sort((x, y) => x.end.localeCompare(y.end))
+        : filterEvents(f),
+    [f, marks]
   );
 
   const activeDestination: CultureBenefit | null = useMemo(() => {
@@ -109,7 +100,7 @@ export function App() {
     };
     setUser(nextUser);
     saveStudentUser(nextUser);
-    setAgeFilter(parsedAge <= 24 ? 'u24' : parsedAge <= 29 ? 'u29' : 'all');
+    set({ age: parsedAge <= 24 ? 'u24' : parsedAge <= 29 ? 'u29' : 'all' });
     setLoginOpen(false);
   };
 
@@ -217,208 +208,104 @@ export function App() {
 
       {/* Main 2-Column Editorial Layout */}
       <main className="main-container">
-        <div className="editorial-grid">
-          {/* Left Column: 1 Profile Photo + Benefit Filters */}
-          <aside className="surface-card" aria-label="혜택 필터">
-            <div className="section-head">
-              <h3 className="display-sm">FILTER</h3>
-              <span className="caption-uppercase">내 조건</span>
+        {!searched ? (
+          <FilterPanel layout="bar" f={f} set={set} bookmarkCount={marks.length} onSearch={() => setSearched(true)} />
+        ) : (
+          <div className="editorial-grid">
+            <FilterPanel layout="side" f={f} set={set} bookmarkCount={marks.length} onCollapse={() => setSearched(false)} />
+
+            <div className="results-col">
+              {f.bookmarkOnly && (
+                <p className="caption-uppercase">★ 북마크한 항목만 표시 중 · 다른 조건은 무시돼요</p>
+              )}
+
+              {showSpots && (
+                <section className="surface-card" aria-labelledby="benefits-heading">
+                  <div className="section-head">
+                    <h3 id="benefits-heading" className="display-sm">
+                      CULTURE SPOTS ({filteredBenefits.length})
+                    </h3>
+                    <span className="caption-uppercase">상설 · 상시 청년 할인 장소</span>
+                    <div className="pill-row">
+                      <button type="button" className="btn-pill" aria-pressed={f.sortBy === 'distance'} onClick={() => set({ sortBy: 'distance' })}>
+                        가까운순
+                      </button>
+                      <button type="button" className="btn-pill" aria-pressed={f.sortBy === 'discount'} onClick={() => set({ sortBy: 'discount' })}>
+                        할인율순
+                      </button>
+                    </div>
+                  </div>
+
+                  {filteredBenefits.length === 0 ? (
+                    <div className="empty-state">
+                      <p className="body-prose">
+                        {f.bookmarkOnly ? '북마크한 상설 장소가 없어요. 카드의 ☆를 눌러 저장해 보세요.' : '선택한 조건에 맞는 장소가 없어요. 시간표나 할인율 필터를 완화해 보세요.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="benefit-list">
+                      {filteredBenefits.map((item) => {
+                        const isSelected = !selectedEvent && activeDestination?.id === item.id;
+                        return (
+                          <article
+                            key={item.id}
+                            className="benefit-card"
+                            data-selected={isSelected ? 'true' : 'false'}
+                            onClick={() => {
+                              setSelectedBenefitId(item.id);
+                              setSelectedEvent(null);
+                            }}
+                          >
+                            <div className="benefit-top">
+                              <span className="caption-uppercase">
+                                {item.category} · {item.ageLabel}
+                              </span>
+                              <span className="discount-tag">{item.discountBadge}</span>
+                              <BookmarkButton active={marks.includes(`spot:${item.id}`)} onToggle={() => toggleMark(`spot:${item.id}`)} />
+                            </div>
+
+                            <h4 className="title-md">{item.title}</h4>
+                            <p className="body-prose">{item.description}</p>
+
+                            <div className="benefit-specs">
+                              <span>거리 {item.distanceKm}km</span>
+                              <span>왕복 약 {item.roundTripMinutes}분</span>
+                              <span>{item.gapTip}</span>
+                            </div>
+
+                            <div className="benefit-footer">
+                              <span className="caption-uppercase">{item.routeSummary}</span>
+                              <a
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-primary-outline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                혜택 링크 이동 ↗
+                              </a>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+              )}
+
+              {showEvents && (
+                <EventsPanel
+                  list={filteredEvents}
+                  gap={f.gap}
+                  selectedId={selectedEvent?.id ?? null}
+                  marks={marks}
+                  onToggleMark={toggleMark}
+                  onSelect={setSelectedEvent}
+                />
+              )}
             </div>
-
-            {/* 공통: 내 시간표 */}
-            <div className="control-block">
-              <span className="caption-uppercase">내 시간표 · 스팟+행사 공통</span>
-              <div className="pill-row">
-                {GAPS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={gap === opt.value}
-                    onClick={() => setGap(opt.value)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Age Filter */}
-            <div className="control-block">
-              <span className="caption-uppercase">내 나이 혜택 기준 · 스팟</span>
-              <div className="pill-row">
-                {AGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={ageFilter === opt.value}
-                    onClick={() => setAgeFilter(opt.value)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Category Filter */}
-            <div className="control-block">
-              <span className="caption-uppercase">분야 · 스팟</span>
-              <div className="pill-row">
-                {CATEGORY_OPTIONS.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={categoryFilter === cat}
-                    onClick={() => setCategoryFilter(cat)}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Discount Filter */}
-            <div className="control-block">
-              <span className="caption-uppercase">할인율 · 스팟</span>
-              <div className="pill-row">
-                {DISCOUNT_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={minDiscount === opt.value}
-                    onClick={() => setMinDiscount(opt.value)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 행사 전용 필터 */}
-            <div className="control-block">
-              <span className="caption-uppercase">분야 · 라이브 행사</span>
-              <div className="pill-row">
-                {GROUPS.map((g) => (
-                  <button
-                    key={g}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={eventGroup === g}
-                    onClick={() => setEventGroup(g)}
-                  >
-                    {g}
-                  </button>
-                ))}
-                <button type="button" className="btn-pill" aria-pressed={onlyYouth} onClick={() => setOnlyYouth((v) => !v)}>
-                  청소년·청년 할인만
-                </button>
-                <button type="button" className="btn-pill" aria-pressed={onlyNow} onClick={() => setOnlyNow((v) => !v)}>
-                  지금 진행 중만
-                </button>
-                <button type="button" className="btn-pill" aria-pressed={soon} onClick={() => setSoon((v) => !v)}>
-                  7일 안에 끝나는 행사
-                </button>
-                <button type="button" className="btn-pill" aria-pressed={deadlineSort} onClick={() => setDeadlineSort((v) => !v)}>
-                  마감 임박순 정렬
-                </button>
-              </div>
-              <input
-                type="search"
-                className="underline-input"
-                placeholder="행사 검색 (예: 용산, 미술관)"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                aria-label="행사 검색"
-              />
-            </div>
-          </aside>
-
-          {/* Right Column: Filtered Culture Benefits */}
-          <section className="surface-card" aria-labelledby="benefits-heading">
-            <div className="section-head">
-              <h3 id="benefits-heading" className="display-sm">
-                CULTURE SPOTS ({filteredBenefits.length})
-              </h3>
-              <div className="pill-row">
-                <button
-                  type="button"
-                  className="btn-pill"
-                  aria-pressed={sortBy === 'distance'}
-                  onClick={() => setSortBy('distance')}
-                >
-                  가까운순
-                </button>
-                <button
-                  type="button"
-                  className="btn-pill"
-                  aria-pressed={sortBy === 'discount'}
-                  onClick={() => setSortBy('discount')}
-                >
-                  할인율순
-                </button>
-              </div>
-            </div>
-
-            {filteredBenefits.length === 0 ? (
-              <div className="empty-state">
-                <p className="body-prose">
-                  선택한 조건에 맞는 혜택이 없습니다. 왕복시간이나 할인율 필터를 완화해 보세요.
-                </p>
-              </div>
-            ) : (
-              <div className="benefit-list">
-                {filteredBenefits.map((item) => {
-                  const isSelected = activeDestination?.id === item.id;
-                  return (
-                    <article
-                      key={item.id}
-                      className="benefit-card"
-                      data-selected={isSelected ? 'true' : 'false'}
-                      onClick={() => {
-                        setSelectedBenefitId(item.id);
-                        setSelectedEvent(null);
-                      }}
-                    >
-                      <div className="benefit-top">
-                        <span className="caption-uppercase">
-                          {item.category} · {item.ageLabel}
-                        </span>
-                        <span className="discount-tag">{item.discountBadge}</span>
-                      </div>
-
-                      <h4 className="title-md">{item.title}</h4>
-                      <p className="body-prose">{item.description}</p>
-
-                      <div className="benefit-specs">
-                        <span>거리 {item.distanceKm}km</span>
-                        <span>왕복 약 {item.roundTripMinutes}분</span>
-                        <span>{item.gapTip}</span>
-                      </div>
-
-                      <div className="benefit-footer">
-                        <span className="caption-uppercase">{item.routeSummary}</span>
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-primary-outline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          혜택 링크 이동 ↗
-                        </a>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-
-        <EventsPanel list={filteredEvents} gap={gap} selectedId={selectedEvent?.id ?? null} onSelect={setSelectedEvent} />
+          </div>
+        )}
       </main>
 
       <footer className="footer-band">
