@@ -1,45 +1,70 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import eventsData from '../data/events.json';
 import type { EventGroup, SeoulEvent } from '../types';
 
-const EVENTS = eventsData as SeoulEvent[];
-const TODAY = new Date().toISOString().slice(0, 10);
-const VIEW_MIN = 30; // 현장 관람 최소 시간(분)
+export const EVENTS = eventsData as SeoulEvent[];
+export const TODAY = new Date().toLocaleDateString('sv-SE'); // 한국 시간 기준 YYYY-MM-DD
+export const VIEW_MIN = 30; // 현장 관람 최소 시간(분)
 
-const GAPS = [
-  { value: 999, label: '시간 제한 없음 (하교 후)' },
+export const GAPS = [
+  { value: 999, label: '제한 없음 (하교 후)' },
   { value: 60, label: '공강 1시간' },
   { value: 90, label: '공강 1시간 30분' },
   { value: 120, label: '공강 2시간' }
 ];
-const GROUPS: ('전체' | EventGroup)[] = ['전체', '전시', '공연', '영화', '체험·축제'];
+export const GROUPS: ('전체' | EventGroup)[] = ['전체', '전시', '공연', '영화', '체험·축제'];
+
+export interface EventFilter {
+  gap: number;
+  group: '전체' | EventGroup;
+  onlyYouth: boolean;
+  onlyNow: boolean;
+  soon: boolean; // 마감 7일 이내
+  deadlineSort: boolean; // 마감 임박순
+  query: string;
+}
+
+const DAY = 86400000;
+export const daysUntil = (d: string) => Math.round((Date.parse(d) - Date.parse(TODAY)) / DAY);
+const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const dow = (d: string) => WEEK[new Date(d + 'T00:00:00').getDay()];
+
+export function filterEvents(f: EventFilter): SeoulEvent[] {
+  const q = f.query.trim().toLowerCase();
+  return EVENTS.filter((e) => {
+    if (f.gap !== 999 && e.rt + VIEW_MIN > f.gap) return false;
+    if (f.group !== '전체' && e.grp !== f.group) return false;
+    if (f.onlyYouth && !e.youth) return false;
+    if (f.onlyNow && e.start > TODAY) return false;
+    if (f.soon && daysUntil(e.end) > 7) return false;
+    if (q && !`${e.title} ${e.place} ${e.gu}`.toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) =>
+    f.deadlineSort
+      ? a.end.localeCompare(b.end) || a.rt - b.rt
+      : a.rt - b.rt || a.end.localeCompare(b.end)
+  );
+}
 
 interface Props {
+  list: SeoulEvent[];
+  gap: number;
   selectedId: number | null;
   onSelect: (ev: SeoulEvent) => void;
 }
 
-const fmt = (d: string) => d.slice(5).replace('-', '.');
+const fmt = (d: string) => `${d.slice(5).replace('-', '.')}(${dow(d)})`;
 
-export function EventsPanel({ selectedId, onSelect }: Props) {
-  const [gap, setGap] = useState(999);
-  const [group, setGroup] = useState<'전체' | EventGroup>('전체');
-  const [onlyYouth, setOnlyYouth] = useState(false);
-  const [onlyNow, setOnlyNow] = useState(true);
-  const [query, setQuery] = useState('');
+function dday(e: SeoulEvent) {
+  const left = daysUntil(e.end);
+  if (daysUntil(e.start) > 0) return { text: `${fmt(e.start)} 시작`, hot: false };
+  if (left === 0) return { text: '오늘 마감', hot: true };
+  if (left === 1) return { text: '내일 마감', hot: true };
+  return { text: `D-${left}`, hot: left <= 7 };
+}
+
+export function EventsPanel({ list, gap, selectedId, onSelect }: Props) {
   const [limit, setLimit] = useState(12);
-
-  const list = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return EVENTS.filter((e) => {
-      if (gap !== 999 && e.rt + VIEW_MIN > gap) return false;
-      if (group !== '전체' && e.grp !== group) return false;
-      if (onlyYouth && !e.youth) return false;
-      if (onlyNow && e.start > TODAY) return false;
-      if (q && !`${e.title} ${e.place} ${e.gu}`.toLowerCase().includes(q)) return false;
-      return true;
-    }).sort((a, b) => a.rt - b.rt || a.end.localeCompare(b.end));
-  }, [gap, group, onlyYouth, onlyNow, query]);
 
   return (
     <section className="surface-card events-panel" aria-labelledby="events-heading">
@@ -47,45 +72,8 @@ export function EventsPanel({ selectedId, onSelect }: Props) {
         <h3 id="events-heading" className="display-sm">
           SEOUL LIVE EVENTS ({list.length})
         </h3>
-        <span className="caption-uppercase">서울문화포털 · 숙대 반경 8km · 무료/청소년·청년 할인</span>
+        <span className="caption-uppercase">서울문화포털 · 숙대 반경 8km · 기간 한정 행사 (필터는 왼쪽)</span>
       </div>
-
-      <div className="control-block">
-        <span className="caption-uppercase">내 시간표</span>
-        <div className="pill-row">
-          {GAPS.map((g) => (
-            <button key={g.value} type="button" className="btn-pill" aria-pressed={gap === g.value} onClick={() => setGap(g.value)}>
-              {g.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="control-block">
-        <span className="caption-uppercase">분야 · 조건</span>
-        <div className="pill-row">
-          {GROUPS.map((g) => (
-            <button key={g} type="button" className="btn-pill" aria-pressed={group === g} onClick={() => setGroup(g)}>
-              {g}
-            </button>
-          ))}
-          <button type="button" className="btn-pill" aria-pressed={onlyYouth} onClick={() => setOnlyYouth((v) => !v)}>
-            청소년·청년 할인만
-          </button>
-          <button type="button" className="btn-pill" aria-pressed={onlyNow} onClick={() => setOnlyNow((v) => !v)}>
-            지금 진행 중만
-          </button>
-        </div>
-      </div>
-
-      <input
-        type="search"
-        className="underline-input"
-        placeholder="행사명 · 장소 · 자치구 검색 (예: 용산, 미술관)"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        aria-label="행사 검색"
-      />
 
       {list.length === 0 ? (
         <div className="empty-state">
@@ -95,17 +83,18 @@ export function EventsPanel({ selectedId, onSelect }: Props) {
         <div className="benefit-list">
           {list.slice(0, limit).map((e) => {
             const left = gap === 999 ? null : gap - e.rt;
-            const daysLeft = Math.ceil((Date.parse(e.end) - Date.parse(TODAY)) / 86400000);
+            const dd = dday(e);
             return (
               <article key={e.id} className="benefit-card" data-selected={selectedId === e.id ? 'true' : 'false'} onClick={() => onSelect(e)}>
                 <div className="benefit-top">
                   <span className="caption-uppercase">{e.grp} · {e.gu} · {e.target || '누구나'}</span>
                   <span className="discount-tag">{e.free ? '무료' : e.youth ? '청년·학생 할인' : e.fee}</span>
+                  <span className={dd.hot ? 'deadline-tag hot' : 'deadline-tag'}>{dd.text}</span>
                 </div>
                 <h4 className="title-md">{e.title}</h4>
                 <p className="body-prose">{e.place}</p>
                 <div className="benefit-specs">
-                  <span>{fmt(e.start)} ~ {fmt(e.end)}{daysLeft <= 7 ? ` · D-${daysLeft}` : ''}</span>
+                  <span className="date-line">📅 {e.start === e.end ? fmt(e.start) : `${fmt(e.start)} ~ ${fmt(e.end)}`}</span>
                   <span>{e.km}km · 왕복 약 {e.rt}분</span>
                   {e.time && <span>{e.time}</span>}
                   {left !== null && <span>공강 중 관람 가능 {left}분</span>}

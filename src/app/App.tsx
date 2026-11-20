@@ -2,7 +2,13 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { SOOKMYUNG_BENEFITS } from '../data/benefits';
 import { loadStudentUser, saveStudentUser } from '../lib/storage';
 import { DriveScene } from '../scene/DriveScene';
-import { EventsPanel } from '../components/EventsPanel';
+import {
+  EventsPanel,
+  GAPS,
+  GROUPS,
+  VIEW_MIN,
+  filterEvents
+} from '../components/EventsPanel';
 import type {
   AgeFilter,
   BenefitCategory,
@@ -26,13 +32,6 @@ const CATEGORY_OPTIONS: ('전체' | BenefitCategory)[] = [
   '기타'
 ];
 
-const TIME_OPTIONS: { value: number; label: string }[] = [
-  { value: 999, label: '전체 시간' },
-  { value: 30, label: '왕복 30분 이내' },
-  { value: 45, label: '왕복 45분 이내' },
-  { value: 60, label: '왕복 60분 이내' }
-];
-
 const DISCOUNT_OPTIONS: { value: number; label: string }[] = [
   { value: 0, label: '전체 할인' },
   { value: 100, label: '무료 (100%)' },
@@ -54,7 +53,14 @@ export function App() {
     return user.age <= 24 ? 'u24' : user.age <= 29 ? 'u29' : 'all';
   });
   const [categoryFilter, setCategoryFilter] = useState<'전체' | BenefitCategory>('전체');
-  const [maxRoundTrip, setMaxRoundTrip] = useState<number>(999);
+  // 공강 시간(두 목록 공통) + 행사 전용 필터
+  const [gap, setGap] = useState<number>(999);
+  const [eventGroup, setEventGroup] = useState<(typeof GROUPS)[number]>('전체');
+  const [onlyYouth, setOnlyYouth] = useState(false);
+  const [onlyNow, setOnlyNow] = useState(true);
+  const [soon, setSoon] = useState(false);
+  const [deadlineSort, setDeadlineSort] = useState(false);
+  const [query, setQuery] = useState('');
   const [minDiscount, setMinDiscount] = useState<number>(0);
   const [sortBy, setSortBy] = useState<'distance' | 'discount'>('distance');
 
@@ -68,7 +74,7 @@ export function App() {
       if (ageFilter === 'u24' && item.maxAge < 24) return false;
       if (ageFilter === 'u29' && item.maxAge < 29) return false;
       if (categoryFilter !== '전체' && item.category !== categoryFilter) return false;
-      if (item.roundTripMinutes > maxRoundTrip) return false;
+      if (gap !== 999 && item.roundTripMinutes + VIEW_MIN > gap) return false;
       if (item.discountPercent < minDiscount) return false;
       return true;
     }).sort((a, b) => {
@@ -77,7 +83,12 @@ export function App() {
       }
       return a.roundTripMinutes - b.roundTripMinutes;
     });
-  }, [ageFilter, categoryFilter, maxRoundTrip, minDiscount, sortBy]);
+  }, [ageFilter, categoryFilter, gap, minDiscount, sortBy]);
+
+  const filteredEvents = useMemo(
+    () => filterEvents({ gap, group: eventGroup, onlyYouth, onlyNow, soon, deadlineSort, query }),
+    [gap, eventGroup, onlyYouth, onlyNow, soon, deadlineSort, query]
+  );
 
   const activeDestination: CultureBenefit | null = useMemo(() => {
     return (
@@ -214,9 +225,27 @@ export function App() {
               <span className="caption-uppercase">내 조건</span>
             </div>
 
+            {/* 공통: 내 시간표 */}
+            <div className="control-block">
+              <span className="caption-uppercase">내 시간표 · 스팟+행사 공통</span>
+              <div className="pill-row">
+                {GAPS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={gap === opt.value}
+                    onClick={() => setGap(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* Age Filter */}
             <div className="control-block">
-              <span className="caption-uppercase">내 나이 혜택 기준</span>
+              <span className="caption-uppercase">내 나이 혜택 기준 · 스팟</span>
               <div className="pill-row">
                 {AGE_OPTIONS.map((opt) => (
                   <button
@@ -234,7 +263,7 @@ export function App() {
 
             {/* Category Filter */}
             <div className="control-block">
-              <span className="caption-uppercase">분야 선택</span>
+              <span className="caption-uppercase">분야 · 스팟</span>
               <div className="pill-row">
                 {CATEGORY_OPTIONS.map((cat) => (
                   <button
@@ -250,27 +279,9 @@ export function App() {
               </div>
             </div>
 
-            {/* Round-Trip Time Filter */}
-            <div className="control-block">
-              <span className="caption-uppercase">숙대 기준 왕복시간</span>
-              <div className="pill-row">
-                {TIME_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className="btn-pill"
-                    aria-pressed={maxRoundTrip === opt.value}
-                    onClick={() => setMaxRoundTrip(opt.value)}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Discount Filter */}
             <div className="control-block">
-              <span className="caption-uppercase">할인율</span>
+              <span className="caption-uppercase">할인율 · 스팟</span>
               <div className="pill-row">
                 {DISCOUNT_OPTIONS.map((opt) => (
                   <button
@@ -284,6 +295,44 @@ export function App() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* 행사 전용 필터 */}
+            <div className="control-block">
+              <span className="caption-uppercase">분야 · 라이브 행사</span>
+              <div className="pill-row">
+                {GROUPS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    className="btn-pill"
+                    aria-pressed={eventGroup === g}
+                    onClick={() => setEventGroup(g)}
+                  >
+                    {g}
+                  </button>
+                ))}
+                <button type="button" className="btn-pill" aria-pressed={onlyYouth} onClick={() => setOnlyYouth((v) => !v)}>
+                  청소년·청년 할인만
+                </button>
+                <button type="button" className="btn-pill" aria-pressed={onlyNow} onClick={() => setOnlyNow((v) => !v)}>
+                  지금 진행 중만
+                </button>
+                <button type="button" className="btn-pill" aria-pressed={soon} onClick={() => setSoon((v) => !v)}>
+                  7일 안에 끝나는 행사
+                </button>
+                <button type="button" className="btn-pill" aria-pressed={deadlineSort} onClick={() => setDeadlineSort((v) => !v)}>
+                  마감 임박순 정렬
+                </button>
+              </div>
+              <input
+                type="search"
+                className="underline-input"
+                placeholder="행사 검색 (예: 용산, 미술관)"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="행사 검색"
+              />
             </div>
           </aside>
 
@@ -369,7 +418,7 @@ export function App() {
           </section>
         </div>
 
-        <EventsPanel selectedId={selectedEvent?.id ?? null} onSelect={setSelectedEvent} />
+        <EventsPanel list={filteredEvents} gap={gap} selectedId={selectedEvent?.id ?? null} onSelect={setSelectedEvent} />
       </main>
 
       <footer className="footer-band">

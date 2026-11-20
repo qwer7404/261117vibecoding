@@ -441,3 +441,7 @@
 
 .events-panel { margin-top: var(--space-lg); display: grid; gap: var(--space-md); }
 .events-panel .underline-input { width: 100%; }
+
+.deadline-tag { padding: 2px 8px; border: 1px solid var(--color-hairline-strong); border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 11px; color: var(--color-muted); white-space: nowrap; }
+.deadline-tag.hot { background: var(--color-primary); border-color: var(--color-primary); color: var(--color-on-primary); }
+.date-line { color: var(--color-ink); }
