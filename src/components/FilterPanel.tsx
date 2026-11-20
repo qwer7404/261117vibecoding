@@ -1,5 +1,6 @@
 import { GAPS, GROUPS } from './EventsPanel';
-import type { AgeFilter, BenefitCategory } from '../types';
+import { getAgeFiltersForUser, type AgeFilter } from '../lib/cultureRules';
+import type { BenefitCategory } from '../types';
 
 export type Kind = 'all' | 'permanent' | 'timed';
 
@@ -8,7 +9,7 @@ export interface Filters {
   gap: number;
   bookmarkOnly: boolean;
   // 상설(상시 혜택)
-  age: AgeFilter;
+  age: AgeFilter[];
   category: '전체' | BenefitCategory;
   minDiscount: number;
   sortBy: 'distance' | 'discount';
@@ -27,9 +28,8 @@ const KINDS: { value: Kind; label: string }[] = [
   { value: 'timed', label: '일정기간 (기간 한정 행사)' }
 ];
 const AGES: { value: AgeFilter; label: string }[] = [
-  { value: 'all', label: '전체 연령' },
-  { value: 'u24', label: '만 24세 이하' },
-  { value: 'u29', label: '만 25~29세' }
+  { value: 'u24', label: '만 24세 이하 기준' },
+  { value: 'u25_29', label: '만 25~29세 기준' }
 ];
 const CATS: ('전체' | BenefitCategory)[] = ['전체', '박물관', '미술관', '문화예술', '기타'];
 const DISCOUNTS = [
@@ -44,15 +44,17 @@ interface Props {
   f: Filters;
   set: (patch: Partial<Filters>) => void;
   bookmarkCount: number;
+  userAge: number | null;
   onSearch?: () => void;
   onCollapse?: () => void;
 }
 
-export function FilterPanel({ layout, f, set, bookmarkCount, onSearch, onCollapse }: Props) {
+export function FilterPanel({ layout, f, set, bookmarkCount, userAge, onSearch, onCollapse }: Props) {
   const showSpots = f.kind !== 'timed';
   const showEvents = f.kind !== 'permanent';
-  const Pill = ({ on, onClick, children }: { on: boolean; onClick: () => void; children: string }) => (
-    <button type="button" className="btn-pill" aria-pressed={on} onClick={onClick}>
+  const availableAgeFilters = getAgeFiltersForUser(userAge);
+  const Pill = ({ on, onClick, children, disabled = false }: { on: boolean; onClick: () => void; children: string; disabled?: boolean }) => (
+    <button type="button" className="btn-pill" aria-pressed={on} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );
@@ -99,14 +101,30 @@ export function FilterPanel({ layout, f, set, bookmarkCount, onSearch, onCollaps
         {showSpots && (
           <>
             <div className="control-block">
-              <span className="caption-uppercase">나이 기준 (상설)</span>
+              <span className="caption-uppercase">나이 기준 (상설 · 중복 선택)</span>
               <div className="pill-row">
                 {AGES.map((a) => (
-                  <Pill key={a.value} on={f.age === a.value} onClick={() => set({ age: a.value })}>
+                  <Pill
+                    key={a.value}
+                    on={f.age.includes(a.value)}
+                    disabled={!availableAgeFilters.includes(a.value)}
+                    onClick={() => set({
+                      age: f.age.includes(a.value)
+                        ? f.age.filter((value) => value !== a.value)
+                        : [...f.age, a.value]
+                    })}
+                  >
                     {a.label}
                   </Pill>
                 ))}
               </div>
+              <p className="footer-fine">
+                {userAge === null
+                  ? '두 기준을 함께 선택할 수 있어요. 로그인하면 내 나이에 맞지 않는 혜택은 자동으로 제외돼요.'
+                  : userAge > 29
+                    ? `만 ${userAge}세는 현재 등록된 만 24세 이하·만 25~29세 기준 혜택 대상이 아니에요.`
+                    : `로그인 나이 만 ${userAge}세 기준으로 받을 수 있는 혜택 유형만 선택할 수 있어요.`}
+              </p>
             </div>
             <div className="control-block">
               <span className="caption-uppercase">분야 (상설)</span>
@@ -171,7 +189,7 @@ export function FilterPanel({ layout, f, set, bookmarkCount, onSearch, onCollaps
       {layout === 'bar' && (
         <div className="filter-actions">
           <span className="caption-uppercase">
-            {f.bookmarkOnly ? '북마크한 항목만 보여줘요 (다른 조건은 무시)' : '고른 조건에 맞는 장소와 행사를 찾아드려요'}
+            {f.bookmarkOnly ? '북마크 중 나이·기간·선택 조건에 맞는 항목만 보여줘요' : '고른 조건에 맞는 장소와 행사를 찾아드려요'}
           </span>
           <button type="button" className="btn-search" onClick={onSearch}>
             검색

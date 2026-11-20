@@ -295,6 +295,16 @@
   background-color: var(--color-canvas);
 }
 
+.btn-pill:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.filter-panel .footer-fine {
+  margin: 0;
+  line-height: 1.5;
+}
+
 .btn-primary-outline {
   min-height: 44px;
   padding: 0 28px;

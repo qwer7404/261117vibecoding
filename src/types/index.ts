@@ -2,8 +2,6 @@ export type DotSize = 'small' | 'medium' | 'large';
 
 export type BenefitCategory = '박물관' | '미술관' | '문화예술' | '기타';
 
-export type AgeFilter = 'all' | 'u24' | 'u29';
-
 export interface ProfileAvatar {
   fileName: string;
   dotSize: DotSize;

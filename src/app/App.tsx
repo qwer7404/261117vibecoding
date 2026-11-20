@@ -1,8 +1,14 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { SOOKMYUNG_BENEFITS } from '../data/benefits';
 import { loadBookmarks, loadStudentUser, saveBookmarks, saveStudentUser } from '../lib/storage';
+import {
+  filterSeoulEvents,
+  getAgeFiltersForUser,
+  isBenefitEligibleForAge,
+  type AgeFilter
+} from '../lib/cultureRules';
 import { DriveScene } from '../scene/DriveScene';
-import { EVENTS, EventsPanel, VIEW_MIN, evKey, filterEvents } from '../components/EventsPanel';
+import { EVENTS, EventsPanel, VIEW_MIN, evKey } from '../components/EventsPanel';
 import { BookmarkButton } from '../components/BookmarkButton';
 import { FilterPanel, type Filters } from '../components/FilterPanel';
 import type {
@@ -13,6 +19,13 @@ import type {
 import './app.css';
 
 export function App() {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => setCurrentTime(new Date()), 30_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
   // Top-right Login State
   const [user, setUser] = useState<StudentUser | null>(() => loadStudentUser());
   const [loginOpen, setLoginOpen] = useState(false);
@@ -25,7 +38,7 @@ export function App() {
     kind: 'all',
     gap: 999,
     bookmarkOnly: false,
-    age: !user ? 'all' : user.age <= 24 ? 'u24' : user.age <= 29 ? 'u29' : 'all',
+    age: getAgeFiltersForUser(user?.age ?? null),
     category: '전체',
     minDiscount: 0,
     sortBy: 'distance',
@@ -58,9 +71,10 @@ export function App() {
 
   const filteredBenefits = useMemo(() => {
     return SOOKMYUNG_BENEFITS.filter((item) => {
-      if (f.bookmarkOnly) return marks.includes(`spot:${item.id}`);
-      if (f.age === 'u24' && item.maxAge < 24) return false;
-      if (f.age === 'u29' && item.maxAge < 29) return false;
+      if (f.bookmarkOnly && !marks.includes(`spot:${item.id}`)) return false;
+      if (!isBenefitEligibleForAge(item, user?.age ?? null)) return false;
+      const benefitAgeGroup: AgeFilter = item.maxAge === 24 ? 'u24' : 'u25_29';
+      if (!f.age.includes(benefitAgeGroup)) return false;
       if (f.category !== '전체' && item.category !== f.category) return false;
       if (f.gap !== 999 && item.roundTripMinutes + VIEW_MIN > f.gap) return false;
       if (item.discountPercent < f.minDiscount) return false;
@@ -71,15 +85,20 @@ export function App() {
       }
       return x.roundTripMinutes - y.roundTripMinutes;
     });
-  }, [f, marks]);
+  }, [f, marks, user]);
 
-  const filteredEvents = useMemo(
-    () =>
-      f.bookmarkOnly
-        ? EVENTS.filter((e) => marks.includes(evKey(e))).sort((x, y) => x.end.localeCompare(y.end))
-        : filterEvents(f),
-    [f, marks]
-  );
+  const filteredEvents = useMemo(() => {
+    const eligibleEvents = filterSeoulEvents(EVENTS, f, user?.age ?? null, currentTime);
+    return f.bookmarkOnly
+      ? eligibleEvents.filter((event) => marks.includes(evKey(event)))
+      : eligibleEvents;
+  }, [f, marks, user, currentTime]);
+
+  useEffect(() => {
+    if (selectedEvent && !filteredEvents.some((event) => event.id === selectedEvent.id)) {
+      setSelectedEvent(null);
+    }
+  }, [filteredEvents, selectedEvent]);
 
   const activeDestination: CultureBenefit | null = useMemo(() => {
     return (
@@ -92,7 +111,7 @@ export function App() {
   const handleLoginSubmit = (e: FormEvent) => {
     e.preventDefault();
     const cleanName = nicknameInput.trim() || '숙명 학우';
-    const parsedAge = Math.max(18, Math.min(39, Number(ageInput) || 22));
+    const parsedAge = Math.max(18, Math.min(39, Math.floor(Number(ageInput) || 22)));
     const nextUser: StudentUser = {
       nickname: cleanName,
       email: emailInput.trim(),
@@ -100,13 +119,15 @@ export function App() {
     };
     setUser(nextUser);
     saveStudentUser(nextUser);
-    set({ age: parsedAge <= 24 ? 'u24' : parsedAge <= 29 ? 'u29' : 'all' });
+    set({ age: getAgeFiltersForUser(parsedAge) });
+    setSelectedEvent(null);
     setLoginOpen(false);
   };
 
   const handleLogout = () => {
     setUser(null);
     saveStudentUser(null);
+    set({ age: getAgeFiltersForUser(null) });
     setLoginOpen(false);
   };
 
@@ -163,8 +184,10 @@ export function App() {
                   type="number"
                   min={18}
                   max={39}
+                  step={1}
                   className="underline-input"
                   value={ageInput}
+                  required
                   onChange={(e) => setAgeInput(e.target.value)}
                 />
               </label>
@@ -209,14 +232,28 @@ export function App() {
       {/* Main 2-Column Editorial Layout */}
       <main className="main-container">
         {!searched ? (
-          <FilterPanel layout="bar" f={f} set={set} bookmarkCount={marks.length} onSearch={() => setSearched(true)} />
+          <FilterPanel
+            layout="bar"
+            f={f}
+            set={set}
+            bookmarkCount={marks.length}
+            userAge={user?.age ?? null}
+            onSearch={() => setSearched(true)}
+          />
         ) : (
           <div className="editorial-grid">
-            <FilterPanel layout="side" f={f} set={set} bookmarkCount={marks.length} onCollapse={() => setSearched(false)} />
+            <FilterPanel
+              layout="side"
+              f={f}
+              set={set}
+              bookmarkCount={marks.length}
+              userAge={user?.age ?? null}
+              onCollapse={() => setSearched(false)}
+            />
 
             <div className="results-col">
               {f.bookmarkOnly && (
-                <p className="caption-uppercase">★ 북마크한 항목만 표시 중 · 다른 조건은 무시돼요</p>
+                <p className="caption-uppercase">★ 북마크 중 나이·기간·선택 조건에 맞는 항목만 표시 중</p>
               )}
 
               {showSpots && (
@@ -239,7 +276,11 @@ export function App() {
                   {filteredBenefits.length === 0 ? (
                     <div className="empty-state">
                       <p className="body-prose">
-                        {f.bookmarkOnly ? '북마크한 상설 장소가 없어요. 카드의 ☆를 눌러 저장해 보세요.' : '선택한 조건에 맞는 장소가 없어요. 시간표나 할인율 필터를 완화해 보세요.'}
+                        {f.bookmarkOnly
+                          ? '내 나이와 조건에 맞는 북마크 상설 장소가 없어요.'
+                          : user && user.age > 29
+                            ? `만 ${user.age}세에게 적용되는 만 24세 이하·만 29세 이하 상설 혜택이 등록되어 있지 않아요.`
+                            : '선택한 조건에 맞는 장소가 없어요. 나이 기준이나 할인율 필터를 조정해 보세요.'}
                       </p>
                     </div>
                   ) : (
@@ -299,6 +340,7 @@ export function App() {
                   gap={f.gap}
                   selectedId={selectedEvent?.id ?? null}
                   marks={marks}
+                  userAge={user?.age ?? null}
                   onToggleMark={toggleMark}
                   onSelect={setSelectedEvent}
                 />
